@@ -1,0 +1,9 @@
+[submodule "pulpino"]
+	path = pulpino
+	url = https://github.com/pulp-platform/pulpino.git
+[submodule "zero-riscy"]
+	path = zero-riscy
+	url = https://github.com/pulp-platform/zero-riscy.git
+[submodule "adv_dbg_if"]
+	path = adv_dbg_if
+	url = https://github.com/pulp-platform/adv_dbg_if.git
