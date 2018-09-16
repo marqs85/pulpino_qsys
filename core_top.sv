@@ -9,9 +9,10 @@
 // specific language governing permissions and limitations under the License.
 
 
-`include "pulpino/rtl/includes/axi_bus.sv"
-`include "pulpino/rtl/includes/debug_bus.sv"
-`include "pulpino/rtl/includes/config.sv"
+`include "axi_bus.sv"
+//`include "debug_bus.sv"
+`include "config.sv"
+`include "adbg_config.sv"
 
 module core_top
 #(
@@ -23,8 +24,8 @@ module core_top
     parameter USE_ZERO_RISCY       = 1,
     parameter RISCY_RV32F          = 0,
     parameter ZERO_RV32M           = 1,
-    parameter ZERO_RV32E           = 0
-
+    parameter ZERO_RV32E           = 0,
+    parameter DEBUG_SLAVE          = 0
   )
 (
     // Clock and Reset
@@ -34,10 +35,10 @@ module core_top
     input  logic        testmode_i,
     input  logic        fetch_enable_i,
     input  logic [31:0] irq_i,
-    output logic        core_busy_o,
     input  logic        clock_gating_i,
     input  logic [31:0] boot_addr_i,
 
+`ifdef ENABLE_ADV_DBG_IF
 `ifdef DBG_AXI4_SUPPORTED
     AXI_BUS.Master      dbg_master,
 `endif
@@ -57,32 +58,39 @@ module core_top
     output [1:0]        wb_bte_o,
 `endif
 
-    //DEBUG_BUS.Slave     debug,
-
-    output logic        instr_req,
-    input logic         instr_gnt,
-    input logic         instr_rvalid,
-    output logic [31:0] instr_addr,
-    input logic [31:0]  instr_rdata,
-
-    output logic        lsu_req,
-    input logic         lsu_gnt,
-    input logic         lsu_rvalid,
-    output logic [31:0] lsu_addr,
-    output logic        lsu_we,
-    output logic [3:0]  lsu_be,
-    input logic [31:0]  lsu_rdata,
-    output logic [31:0] lsu_wdata,
-
     // JTAG signals
     input  logic        tck_i,
     input  logic        trstn_i,
     input  logic        tms_i,
     input  logic        tdi_i,
-    output logic        tdo_o
-  );
+    output logic        tdo_o,
+`endif // ENABLE_ADV_DBG_IF
 
-  DEBUG_BUS debug();
+    output logic        instr_read,
+    input logic         instr_busy,
+    input logic         instr_rvalid,
+    output logic [31:0] instr_addr,
+    input logic [31:0]  instr_rdata,
+
+    output logic        lsu_read,
+    input logic         lsu_busy,
+    input logic         lsu_rvalid,
+    output logic [31:0] lsu_addr,
+    output logic        lsu_write,
+    output logic [3:0]  lsu_be,
+    input logic [31:0]  lsu_rdata,
+    output logic [31:0] lsu_wdata,
+    input logic [1:0]   lsu_resp,
+    input logic         lsu_wrespvalid,
+
+    input  logic        debug_read,
+    output logic        debug_busy,
+    output logic        debug_rvalid,
+    input  logic [14:0] debug_addr,
+    input  logic        debug_write,
+    input  logic [31:0] debug_wdata,
+    output logic [31:0] debug_rdata
+  );
 
   // signals from/to core
   logic         core_instr_req;
@@ -100,23 +108,36 @@ module core_top
   logic [31:0]  core_lsu_rdata;
   logic [31:0]  core_lsu_wdata;
 
-  // TMP
-  assign instr_req = core_instr_req;
+  logic         core_debug_req;
+  logic         core_debug_gnt;
+  logic         core_debug_rvalid;
+  logic [14:0]  core_debug_addr;
+  logic         core_debug_we;
+  logic [31:0]  core_debug_wdata;
+  logic [31:0]  core_debug_rdata;
+
+  assign instr_read = core_instr_req;
   assign instr_addr = core_instr_addr;
-  assign core_instr_gnt = instr_gnt;
+  assign core_instr_gnt = ~instr_busy & core_instr_req;
   assign core_instr_rvalid = instr_rvalid;
   assign core_instr_rdata = instr_rdata;
 
-  assign lsu_req = core_lsu_req;
+  assign lsu_read = core_lsu_req & ~core_lsu_we;
   assign lsu_addr = core_lsu_addr;
-  assign lsu_we = core_lsu_we;
+  assign lsu_write = core_lsu_req & core_lsu_we;
   assign lsu_be = core_lsu_be;
   assign lsu_wdata = core_lsu_wdata;
-  assign core_lsu_gnt = lsu_gnt;
-  assign core_lsu_rvalid = lsu_rvalid;
+  assign core_lsu_gnt = ~lsu_busy & core_lsu_req;
+  assign core_lsu_rvalid = lsu_rvalid | lsu_wrespvalid;
   assign core_lsu_rdata = lsu_rdata;
   
-  
+  assign core_debug_req = debug_read | debug_write;
+  assign debug_busy = ~core_debug_gnt;
+  assign debug_rvalid = core_debug_rvalid;
+  assign core_debug_addr = debug_addr;
+  assign core_debug_we = debug_write;
+  assign core_debug_wdata = debug_wdata;
+  assign debug_rdata = core_debug_rdata;
 
   //----------------------------------------------------------------------------//
   // Core Instantiation
@@ -171,13 +192,13 @@ module core_top
     .irq_ack_o       (                   ),
     .irq_id_o        (                   ),
 
-    .debug_req_i     ( debug.req         ),
-    .debug_gnt_o     ( debug.gnt         ),
-    .debug_rvalid_o  ( debug.rvalid      ),
-    .debug_addr_i    ( debug.addr        ),
-    .debug_we_i      ( debug.we          ),
-    .debug_wdata_i   ( debug.wdata       ),
-    .debug_rdata_o   ( debug.rdata       ),
+    .debug_req_i     ( core_debug_req    ),
+    .debug_gnt_o     ( core_debug_gnt    ),
+    .debug_rvalid_o  ( core_debug_rvalid ),
+    .debug_addr_i    ( core_debug_addr   ),
+    .debug_we_i      ( core_debug_we     ),
+    .debug_wdata_i   ( core_debug_wdata  ),
+    .debug_rdata_o   ( core_debug_rdata  ),
     .debug_halted_o  (                   ),
     .debug_halt_i    ( 1'b0              ),
     .debug_resume_i  ( 1'b0              ),
@@ -191,6 +212,7 @@ module core_top
   // Advanced Debug Unit
   //----------------------------------------------------------------------------//
 
+`ifdef ENABLE_ADV_DBG_IF
   // TODO: remove the debug connections to the core
   adv_dbg_if
   #(
@@ -291,5 +313,6 @@ module core_top
     .wb_bte_o             (wb_bte_o)
 `endif
     );
+`endif // ENABLE_ADV_DBG_IF
 
 endmodule

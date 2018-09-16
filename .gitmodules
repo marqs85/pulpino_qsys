@@ -1,9 +1,6 @@
 [submodule "pulpino"]
 	path = pulpino
-	url = /home/markus/Code/git_repos/pulpino.git
+	url = https://github.com/marqs85/pulpino.git
 [submodule "zero-riscy"]
 	path = zero-riscy
-	url = /home/markus/Code/git_repos/zero-riscy.git
-[submodule "adv_dbg_if"]
-	path = adv_dbg_if
-	url = /home/markus/Code/git_repos/adv_dbg_if.git
+	url = https://github.com/pulp-platform/zero-riscy.git
