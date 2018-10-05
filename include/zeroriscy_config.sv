@@ -25,6 +25,9 @@
 
 `define PULP_FPGA_EMUL
 
+// define this to disable extra perf counters
+`define ASIC_SYNTHESIS
+
 // no traces for synthesis, they are not synthesizable
 `ifndef SYNTHESIS
 `ifndef PULP_FPGA_EMUL
